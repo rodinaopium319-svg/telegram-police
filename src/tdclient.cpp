@@ -2,7 +2,6 @@
 #include <td/telegram/td_json_client.h>
 #include <QJsonDocument>
 #include <QStandardPaths>
-#include <QtConcurrent>
 TdClient::TdClient(int id, QString hash, QObject* p) : QObject(p), apiId_(id), apiHash_(hash) {
   td_execute("{\"@type\":\"setLogVerbosityLevel\",\"new_verbosity_level\":1}");
   client_ = td_json_client_create();

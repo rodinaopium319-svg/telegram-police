@@ -9,13 +9,22 @@ jobs:
         with: { version: '6.7.*', arch: win64_msvc2019_64 }
       - name: openssl and zlib
         run: vcpkg install openssl:x64-windows zlib:x64-windows
+      - name: cache TDLib
+        id: tdc
+        uses: actions/cache/restore@v4
+        with: { path: tdinstall, key: tdlib-win-v1 }
       - name: gperf
         run: choco install gperf -y --no-progress
       - name: build TDLib (no LTO, Release only)
+        if: steps.tdc.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://github.com/tdlib/td.git
           cmake -S td -B tdbuild -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_INSTALL_PREFIX="$PWD/tdinstall"
           cmake --build tdbuild --target install --config Release --parallel 4
+      - name: save TDLib cache
+        if: steps.tdc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with: { path: tdinstall, key: tdlib-win-v1 }
       - name: build app
         run: |
           cmake -B build -A x64 -DCMAKE_PREFIX_PATH="$PWD/tdinstall" -DCMAKE_BUILD_TYPE=Release
