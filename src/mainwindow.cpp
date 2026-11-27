@@ -21,7 +21,7 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   setStyleSheet("QListWidget{color:#eee;background:rgba(8,8,8,150);border:0;font-size:14px}"
     "QListWidget::item{padding:10px}QListWidget::item:selected{background:#3a3a3a;color:#fff}"
     "QLabel#t{background:rgba(0,0,0,220);color:#fff;font-weight:bold;padding:12px;font-size:15px}"
-    "QTextBrowser{color:#eee;background:rgba(0,0,0,70);border:0;font-size:14px}"
+    "QListWidget#m{color:#eee;background:rgba(0,0,0,70);border:0;font-size:14px;outline:0}QListWidget#m::item{padding:6px;margin:3px 40px;border-radius:6px}QLabel#r{background:rgba(28,28,28,235);color:#ddd;padding:6px 12px}"
     "QLineEdit{color:#fff;background:rgba(8,8,8,190);border:0;border-top:1px solid #3a3a3a;padding:12px;font-size:14px}");
   list_ = new QListWidget;
   profile_ = new QPushButton("Me"); profile_->setStyleSheet("background:rgba(0,0,0,220);color:#fff;border:0;padding:12px;text-align:left;font-weight:bold");
@@ -31,7 +31,14 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   left->addWidget(profile_); left->addWidget(list_);
   auto* leftW = new QWidget; leftW->setLayout(left); leftW->setFixedWidth(300);
   title_ = new QLabel("Telegram Police"); title_->setObjectName("t");
-  msgs_ = new QTextBrowser; input_ = new QLineEdit; input_->setPlaceholderText("Write a message...");
+  msgs_ = new QListWidget; msgs_->setObjectName("m"); msgs_->setWordWrap(true); msgs_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  msgs_->viewport()->installEventFilter(this); msgs_->setContextMenuPolicy(Qt::NoContextMenu);
+  hold_ = new QTimer(this); hold_->setSingleShot(true); hold_->setInterval(700);
+  connect(hold_, &QTimer::timeout, this, [this]{ if (pressItem_) { QMenu m; auto* a = m.addAction("Reply"); auto* b = m.addAction(pinned_?"Unpin reply":"Pin Reply");
+    auto* c = m.exec(QCursor::pos()); if (c==a) setReply(pressItem_, false); else if (c==b) { if (pinned_) clearReply(); else setReply(pressItem_, true); } pressItem_ = nullptr; } });
+  replyBar_ = new QLabel; replyBar_->setObjectName("r"); replyX_ = new QPushButton("X"); replyX_->setFlat(true); replyX_->setStyleSheet("color:#fff;padding:6px 12px;background:rgba(28,28,28,235);border:0");
+  connect(replyX_, &QPushButton::clicked, this, &MainWindow::clearReply);
+  auto* rb = new QWidget; auto* rl = new QHBoxLayout(rb); rl->setContentsMargins(0,0,0,0); rl->setSpacing(0); rl->addWidget(replyBar_,1); rl->addWidget(replyX_); rb->hide(); replyW_ = rb; input_ = new QLineEdit; input_->setPlaceholderText("Write a message...");
   login_ = nullptr;
   auto* bgBtn = new QPushButton("Background"); bgBtn->setStyleSheet("background:rgba(28,28,28,235);color:#fff;border:0;padding:12px");
   connect(bgBtn, &QPushButton::clicked, this, [this]{
@@ -40,7 +47,7 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   QString saved = QSettings().value("bg").toString(); if (!saved.isEmpty()) applyBg(saved);
   auto* bar = new QHBoxLayout; bar->setSpacing(0); bar->addWidget(title_, 1); bar->addWidget(bgBtn);
   auto* right = new QVBoxLayout; right->setSpacing(0); right->setContentsMargins(0,0,0,0);
-  right->addLayout(bar); right->addWidget(msgs_); right->addWidget(input_);
+  right->addLayout(bar); right->addWidget(msgs_); right->addWidget(replyW_); right->addWidget(input_);
   auto* h = new QHBoxLayout(this); h->setSpacing(0); h->setContentsMargins(0,0,0,0);
   h->addWidget(leftW); h->addLayout(right, 1);
   connect(td_, &TdClient::update, this, &MainWindow::onUpdate, Qt::QueuedConnection);
@@ -82,18 +89,14 @@ void MainWindow::onUpdate(QJsonObject o) {
     }
   } else if (t == "updateNewMessage" || t == "message") {
     QJsonObject m = t=="message" ? o : o["message"].toObject();
-    if (m["chat_id"].toVariant().toLongLong() == cur_ && m["content"].toObject()["@type"] == "messageText") {
-      bool out = m["is_outgoing"].toBool();
-      msgs_->append(QString("<div align='%1'><span style='color:#fff;background:%2'>&nbsp;%3&nbsp;</span></div>").arg(out?"right":"left", out?"#2b2b2b":"#262626",
-        m["content"].toObject()["text"].toObject()["text"].toString().toHtmlEscaped()));
-    }
+    if (m["chat_id"].toVariant().toLongLong() == cur_) addMsg(m);
   } else if (t == "messages") {
     QJsonArray a = o["messages"].toArray();
     for (int i = a.size()-1; i >= 0; --i) onUpdate(a[i].toObject().isEmpty()? QJsonObject{} : [&]{ auto m = a[i].toObject(); m["@type"]="message"; return m; }());
   }
 }
 void MainWindow::openChat(qint64 id) {
-  cur_ = id; msgs_->clear(); title_->setText(names_[id]);
+  cur_ = id; msgs_->clear(); clearReply(); title_->setText(names_[id]);
   td_->send({{"@type","getChatHistory"},{"chat_id",id},{"from_message_id",0},{"offset",0},{"limit",50},{"only_local",false}});
 }
 void MainWindow::submit() {
@@ -101,9 +104,44 @@ void MainWindow::submit() {
   if (m=="phone") td_->send({{"@type","setAuthenticationPhoneNumber"},{"phone_number",v}});
   else if (m=="code") td_->send({{"@type","checkAuthenticationCode"},{"code",v}});
   else if (m=="pass") td_->send({{"@type","checkAuthenticationPassword"},{"password",v}});
-  else if (cur_) td_->send({{"@type","sendMessage"},{"chat_id",cur_},{"input_message_content",QJsonObject{{"@type","inputMessageText"},{"text",QJsonObject{{"@type","formattedText"},{"text",v}}}}}});
+  else if (cur_) {
+    QJsonObject req{{"@type","sendMessage"},{"chat_id",cur_},{"input_message_content",QJsonObject{{"@type","inputMessageText"},{"text",QJsonObject{{"@type","formattedText"},{"text",v}}}}}};
+    if (replyId_) req["reply_to"] = QJsonObject{{"@type","inputMessageReplyToMessage"},{"message_id",(double)replyId_}};
+    td_->send(req);
+  }
+  if (!pinned_) clearReply();
 }
 
 void MainWindow::applyBg(const QString& f) {
   QPixmap pm(f); if (pm.isNull()) return; bg_ = pm; update();
+}
+
+void MainWindow::addMsg(const QJsonObject& m) {
+  QJsonObject c = m["content"].toObject(); QString txt = c["@type"]=="messageText" ? c["text"].toObject()["text"].toString() : "[media]";
+  bool out = m["is_outgoing"].toBool();
+  auto* it = new QListWidgetItem(txt); it->setData(Qt::UserRole, m["id"].toVariant().toLongLong());
+  it->setBackground(QColor(out ? "#2b2b2b" : "#262626")); it->setForeground(QColor("#fff"));
+  it->setTextAlignment(out ? Qt::AlignRight : Qt::AlignLeft); msgs_->addItem(it); msgs_->scrollToBottom();
+}
+void MainWindow::setReply(QListWidgetItem* it, bool pin) {
+  replyId_ = it->data(Qt::UserRole).toLongLong(); pinned_ = pin; replyPreview_ = it->text().left(60);
+  replyBar_->setText((pin ? "Pinned reply: " : "Replying to: ") + replyPreview_); replyW_->show(); input_->setFocus();
+}
+void MainWindow::clearReply() { replyId_ = 0; pinned_ = false; if (replyW_) replyW_->hide(); }
+bool MainWindow::eventFilter(QObject* o, QEvent* e) {
+  if (o != msgs_->viewport()) return false;
+  auto* me = dynamic_cast<QMouseEvent*>(e);
+  if (!me) return false;
+  if (e->type() == QEvent::MouseButtonPress) {
+    if (me->button() == Qt::RightButton) { auto* it = msgs_->itemAt(me->pos()); if (it) { pressItem_ = it; QMenu m; auto* a = m.addAction("Reply"); auto* b = m.addAction(pinned_?"Unpin reply":"Pin Reply");
+      auto* c = m.exec(me->globalPosition().toPoint()); if (c==a) setReply(it,false); else if (c==b) { if (pinned_) clearReply(); else setReply(it,true); } pressItem_ = nullptr; return true; } }
+    pressPos_ = me->pos(); pressItem_ = msgs_->itemAt(me->pos()); if (pressItem_) hold_->start();
+  } else if (e->type() == QEvent::MouseMove) {
+    if ((me->pos() - pressPos_).manhattanLength() > 12) hold_->stop();
+  } else if (e->type() == QEvent::MouseButtonRelease) {
+    hold_->stop();
+    if (pressItem_ && qAbs(me->pos().x() - pressPos_.x()) > 70 && qAbs(me->pos().y() - pressPos_.y()) < 30) { setReply(pressItem_, false); }
+    pressItem_ = nullptr;
+  }
+  return false;
 }
