@@ -14,7 +14,7 @@
 #include <dwmapi.h>
 #endif
 MainWindow::MainWindow(TdClient* c) : td_(c) {
-  setWindowTitle("Tasker Abdo Police"); setWindowIcon(QIcon(":/icon.png")); resize(900, 620);
+  setWindowTitle("Telegram Police"); setWindowIcon(QIcon(":/icon.png")); resize(900, 620);
   setAttribute(Qt::WA_TranslucentBackground);
   QString sv = QSettings().value("bg").toString(); if (!sv.isEmpty()) bg_ = QPixmap(sv);
   // 2018 Telegram: white list on the left, blue header, light chat area
@@ -30,7 +30,7 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   auto* left = new QVBoxLayout; left->setSpacing(0); left->setContentsMargins(0,0,0,0);
   left->addWidget(profile_); left->addWidget(list_);
   auto* leftW = new QWidget; leftW->setLayout(left); leftW->setFixedWidth(300);
-  title_ = new QLabel("Tasker Abdo Police"); title_->setObjectName("t");
+  title_ = new QLabel("Telegram Police"); title_->setObjectName("t");
   msgs_ = new QTextBrowser; input_ = new QLineEdit; input_->setPlaceholderText("Write a message...");
   login_ = nullptr;
   auto* bgBtn = new QPushButton("Background"); bgBtn->setStyleSheet("background:rgba(110,8,20,235);color:#fff;border:0;padding:12px");
@@ -66,7 +66,7 @@ void MainWindow::onUpdate(QJsonObject o) {
     if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Enter phone number (+20...) below"); login_ = input_; input_->setProperty("m","phone"); }
     else if (s == "authorizationStateWaitCode") { title_->setText("Enter the code Telegram sent you"); input_->setProperty("m","code"); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Enter your 2-step password"); input_->setProperty("m","pass"); }
-    else if (s == "authorizationStateReady") { input_->setProperty("m","chat"); title_->setText("Tasker Abdo Police");
+    else if (s == "authorizationStateReady") { input_->setProperty("m","chat"); title_->setText("Telegram Police");
       td_->send({{"@type","getMe"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
   } else if (t == "user" && o["id"].toVariant().toLongLong() > 0 && meText_.isEmpty()) {
     QString n = (o["first_name"].toString()+" "+o["last_name"].toString()).trimmed();
