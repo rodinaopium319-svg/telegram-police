@@ -9,6 +9,8 @@ jobs:
         with: { version: '6.7.*', arch: win64_msvc2019_64 }
       - name: openssl and zlib
         run: vcpkg install openssl:x64-windows zlib:x64-windows
+      - name: gperf
+        run: choco install gperf -y --no-progress
       - name: build TDLib (no LTO, Release only)
         run: |
           git clone --depth 1 https://github.com/tdlib/td.git
