@@ -19,12 +19,12 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   QString sv = QSettings().value("bg").toString(); if (!sv.isEmpty()) bg_ = QPixmap(sv);
   // 2018 Telegram: white list on the left, blue header, light chat area
   setStyleSheet("QListWidget{color:#eee;background:rgba(15,15,18,150);border:0;font-size:14px}"
-    "QListWidget::item{padding:10px}QListWidget::item:selected{background:#8b0a1a;color:#fff}"
-    "QLabel#t{background:rgba(75,5,15,225);color:#fff;font-weight:bold;padding:12px;font-size:15px}"
+    "QListWidget::item{padding:10px}QListWidget::item:selected{background:#3a3a40;color:#fff}"
+    "QLabel#t{background:rgba(8,8,10,220);color:#fff;font-weight:bold;padding:12px;font-size:15px}"
     "QTextBrowser{color:#eee;background:rgba(0,0,0,70);border:0;font-size:14px}"
-    "QLineEdit{color:#fff;background:rgba(15,15,18,190);border:0;border-top:1px solid #8b0a1a;padding:12px;font-size:14px}");
+    "QLineEdit{color:#fff;background:rgba(15,15,18,190);border:0;border-top:1px solid #3a3a40;padding:12px;font-size:14px}");
   list_ = new QListWidget;
-  profile_ = new QPushButton("Me"); profile_->setStyleSheet("background:rgba(75,5,15,225);color:#fff;border:0;padding:12px;text-align:left;font-weight:bold");
+  profile_ = new QPushButton("Me"); profile_->setStyleSheet("background:rgba(8,8,10,220);color:#fff;border:0;padding:12px;text-align:left;font-weight:bold");
   connect(profile_, &QPushButton::clicked, this, [this]{
     QMessageBox::information(this, "My profile", meText_.isEmpty() ? "Loading..." : meText_); });
   auto* left = new QVBoxLayout; left->setSpacing(0); left->setContentsMargins(0,0,0,0);
@@ -33,7 +33,7 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   title_ = new QLabel("Telegram Police"); title_->setObjectName("t");
   msgs_ = new QTextBrowser; input_ = new QLineEdit; input_->setPlaceholderText("Write a message...");
   login_ = nullptr;
-  auto* bgBtn = new QPushButton("Background"); bgBtn->setStyleSheet("background:rgba(110,8,20,235);color:#fff;border:0;padding:12px");
+  auto* bgBtn = new QPushButton("Background"); bgBtn->setStyleSheet("background:rgba(30,30,34,235);color:#fff;border:0;padding:12px");
   connect(bgBtn, &QPushButton::clicked, this, [this]{
     QString f = QFileDialog::getOpenFileName(this, "Chat background", QString(), "Images (*.png *.jpg *.jpeg *.bmp)");
     if (f.isEmpty()) return; QSettings().setValue("bg", f); applyBg(f); });
@@ -84,7 +84,7 @@ void MainWindow::onUpdate(QJsonObject o) {
     QJsonObject m = t=="message" ? o : o["message"].toObject();
     if (m["chat_id"].toVariant().toLongLong() == cur_ && m["content"].toObject()["@type"] == "messageText") {
       bool out = m["is_outgoing"].toBool();
-      msgs_->append(QString("<div align='%1'><span style='color:#fff;background:%2'>&nbsp;%3&nbsp;</span></div>").arg(out?"right":"left", out?"#5c0a14":"#2a2a30",
+      msgs_->append(QString("<div align='%1'><span style='color:#fff;background:%2'>&nbsp;%3&nbsp;</span></div>").arg(out?"right":"left", out?"#2e2e35":"#2a2a30",
         m["content"].toObject()["text"].toObject()["text"].toString().toHtmlEscaped()));
     }
   } else if (t == "messages") {
