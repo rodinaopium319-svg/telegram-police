@@ -80,10 +80,11 @@ void MainWindow::onUpdate(QJsonObject o) {
   QString t = o["@type"].toString();
   if (t == "updateAuthorizationState") {
     QString s = o["authorization_state"].toObject()["@type"].toString();
-    if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Log in: type your phone number with country code (e.g. +20...) in the box below and press Enter"); input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
+    if (s == "authorizationStateWaitPhoneNumber") { { QSettings q; title_->setText(QString("Log in: type your phone with country code (+20...) and press Enter.  [API ID %1, hash %2 chars - hash must be 32]").arg(q.value("api_id").toInt()).arg(q.value("api_hash").toString().size())); } input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
     else if (s == "authorizationStateWaitCode") { QString ty = o["authorization_state"].toObject()["code_info"].toObject()["type"].toObject()["@type"].toString();
       QString where = ty=="authenticationCodeTypeTelegramMessage" ? "in your Telegram app (chat named Telegram) on another device" : ty=="authenticationCodeTypeSms" || ty=="authenticationCodeTypeSmsWord" || ty=="authenticationCodeTypeSmsPhrase" ? "by SMS" : ty=="authenticationCodeTypeCall" || ty=="authenticationCodeTypeFlashCall" || ty=="authenticationCodeTypeMissedCall" ? "by phone call" : "(" + ty + ")";
-      title_->setText("Code sent " + where + ". Type it and press Enter. Type resend for a new code."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
+      auto ci = o["authorization_state"].toObject()["code_info"].toObject(); QString nt = ci["next_type"].toObject()["@type"].toString().replace("authenticationCodeType","");
+      title_->setText("Code sent " + where + " to " + ci["phone_number"].toString() + ". Type it and press Enter. If nothing arrives after " + QString::number(ci["timeout"].toInt()) + "s, type resend (next: " + (nt.isEmpty() ? "none" : nt) + ")."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Type your 2-step verification password and press Enter"); input_->setPlaceholderText("2-step password"); input_->setProperty("m","pass"); input_->setEchoMode(QLineEdit::Password); }
     else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
     else if (s == "authorizationStateReady") { input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
