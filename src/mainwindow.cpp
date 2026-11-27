@@ -55,7 +55,9 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
     QString f = QFileDialog::getOpenFileName(this, "Chat background", QString(), "Images (*.png *.jpg *.jpeg *.bmp)");
     if (f.isEmpty()) return; QSettings().setValue("bg", f); applyBg(f); });
   QString saved = QSettings().value("bg").toString(); if (!saved.isEmpty()) applyBg(saved);
-  auto* bar = new QHBoxLayout; bar->setSpacing(0); bar->addWidget(title_, 1); bar->addWidget(bgBtn);
+  resendBtn_ = new QPushButton("Resend code (SMS)"); resendBtn_->setStyleSheet("background:#8b1a1a;color:#fff;border:0;padding:12px;font-weight:bold"); resendBtn_->hide();
+  connect(resendBtn_, &QPushButton::clicked, this, [this]{ title_->setText("Asking for a new code..."); td_->send({{"@type","resendAuthenticationCode"}}); });
+  auto* bar = new QHBoxLayout; bar->setSpacing(0); bar->addWidget(title_, 1); bar->addWidget(resendBtn_); bar->addWidget(bgBtn);
   auto* right = new QVBoxLayout; right->setSpacing(0); right->setContentsMargins(0,0,0,0);
   right->addLayout(bar); right->addWidget(msgs_); right->addWidget(replyW_); right->addWidget(input_);
   auto* h = new QHBoxLayout(this); h->setSpacing(0); h->setContentsMargins(0,0,0,0);
@@ -84,10 +86,10 @@ void MainWindow::onUpdate(QJsonObject o) {
     else if (s == "authorizationStateWaitCode") { QString ty = o["authorization_state"].toObject()["code_info"].toObject()["type"].toObject()["@type"].toString();
       QString where = ty=="authenticationCodeTypeTelegramMessage" ? "in your Telegram app (chat named Telegram) on another device" : ty=="authenticationCodeTypeSms" || ty=="authenticationCodeTypeSmsWord" || ty=="authenticationCodeTypeSmsPhrase" ? "by SMS" : ty=="authenticationCodeTypeCall" || ty=="authenticationCodeTypeFlashCall" || ty=="authenticationCodeTypeMissedCall" ? "by phone call" : "(" + ty + ")";
       auto ci = o["authorization_state"].toObject()["code_info"].toObject(); QString nt = ci["next_type"].toObject()["@type"].toString().replace("authenticationCodeType","");
-      title_->setText("Code sent " + where + " to " + ci["phone_number"].toString() + ". Type it and press Enter. If nothing arrives after " + QString::number(ci["timeout"].toInt()) + "s, type resend (next: " + (nt.isEmpty() ? "none" : nt) + ")."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
+      title_->setText("Code sent " + where + " to " + ci["phone_number"].toString() + ". Type it and press Enter. If nothing arrives after " + QString::number(ci["timeout"].toInt()) + "s, type resend (next: " + (nt.isEmpty() ? "none" : nt) + ")."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); resendBtn_->show(); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Type your 2-step verification password and press Enter"); input_->setPlaceholderText("2-step password"); input_->setProperty("m","pass"); input_->setEchoMode(QLineEdit::Password); }
     else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
-    else if (s == "authorizationStateReady") { input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
+    else if (s == "authorizationStateReady") { resendBtn_->hide(); input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
       td_->send({{"@type","getMe"},{"@extra","me"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
   } else if (t == "user" && o["@extra"].toString() != "me") {
     qint64 uid = o["id"].toVariant().toLongLong();
