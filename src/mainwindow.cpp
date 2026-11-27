@@ -9,6 +9,8 @@
 #include <QSettings>
 #include <QImage>
 #include <QMessageBox>
+#include <QProcess>
+#include <QApplication>
 #ifdef _WIN32
 #include <windows.h>
 #include <dwmapi.h>
@@ -28,7 +30,12 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   connect(profile_, &QPushButton::clicked, this, [this]{
     QMessageBox::information(this, "My profile", meText_.isEmpty() ? "Loading..." : meText_); });
   auto* left = new QVBoxLayout; left->setSpacing(0); left->setContentsMargins(0,0,0,0);
-  left->addWidget(profile_); left->addWidget(list_);
+  logoutBtn_ = new QPushButton("Log out"); logoutBtn_->setStyleSheet("background:rgba(28,28,28,235);color:#fff;border:0;padding:12px");
+  connect(logoutBtn_, &QPushButton::clicked, this, [this]{
+    if (QMessageBox::question(this, "Log out", "Log out of this account? You can log in with another number.") == QMessageBox::Yes)
+      td_->send({{"@type","logOut"}}); });
+  auto* topRow = new QHBoxLayout; topRow->setSpacing(0); topRow->addWidget(profile_, 1); topRow->addWidget(logoutBtn_);
+  left->addLayout(topRow); left->addWidget(list_);
   auto* leftW = new QWidget; leftW->setLayout(left); leftW->setFixedWidth(300);
   title_ = new QLabel("Telegram Police"); title_->setObjectName("t");
   msgs_ = new QListWidget; msgs_->setObjectName("m"); msgs_->setWordWrap(true); msgs_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -73,9 +80,17 @@ void MainWindow::onUpdate(QJsonObject o) {
     if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Enter phone number (+20...) below"); login_ = input_; input_->setProperty("m","phone"); }
     else if (s == "authorizationStateWaitCode") { title_->setText("Enter the code Telegram sent you"); input_->setProperty("m","code"); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Enter your 2-step password"); input_->setProperty("m","pass"); }
+    else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
     else if (s == "authorizationStateReady") { input_->setProperty("m","chat"); title_->setText("Telegram Police");
-      td_->send({{"@type","getMe"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
-  } else if (t == "user" && o["id"].toVariant().toLongLong() > 0 && meText_.isEmpty()) {
+      td_->send({{"@type","getMe"},{"@extra","me"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
+  } else if (t == "user" && o["@extra"].toString() != "me") {
+    qint64 uid = o["id"].toVariant().toLongLong();
+    QString n = (o["first_name"].toString()+" "+o["last_name"].toString()).trimmed();
+    auto un = o["usernames"].toObject()["active_usernames"].toArray();
+    QString extra = !un.isEmpty() ? "@"+un[0].toString() : (o["phone_number"].toString().isEmpty() ? "" : "+"+o["phone_number"].toString());
+    QString label = extra.isEmpty() ? n : n + "  " + extra; userLabel_[uid] = label;
+    for (auto* it : pending_.take(uid)) it->setText(label + "\n" + it->data(Qt::UserRole+1).toString());
+  } else if (t == "user" && meText_.isEmpty()) {
     QString n = (o["first_name"].toString()+" "+o["last_name"].toString()).trimmed();
     QString un = o["usernames"].toObject()["active_usernames"].toArray().isEmpty() ? "" : "@"+o["usernames"].toObject()["active_usernames"].toArray()[0].toString();
     meText_ = n + "\n" + un + "\n+" + o["phone_number"].toString(); profile_->setText(n);
@@ -85,6 +100,7 @@ void MainWindow::onUpdate(QJsonObject o) {
     QString type = o["type"].toObject()["@type"].toString();
     if (type=="chatTypeSecret"||type=="chatTypeBasicGroup"||type=="chatTypeSupergroup"||type=="chatTypePrivate") {
       qint64 id = o["id"].toVariant().toLongLong(); names_[id] = o["title"].toString();
+      isGroup_[id] = (type=="chatTypeBasicGroup") || (type=="chatTypeSupergroup" && !o["type"].toObject()["is_channel"].toBool());
       auto* it = new QListWidgetItem(o["title"].toString()); it->setData(Qt::UserRole, id); list_->addItem(it);
     }
   } else if (t == "updateNewMessage" || t == "message") {
@@ -96,7 +112,7 @@ void MainWindow::onUpdate(QJsonObject o) {
   }
 }
 void MainWindow::openChat(qint64 id) {
-  cur_ = id; msgs_->clear(); clearReply(); title_->setText(names_[id]);
+  cur_ = id; pending_.clear(); curGroup_ = isGroup_.value(id); msgs_->clear(); clearReply(); title_->setText(names_[id]);
   td_->send({{"@type","getChatHistory"},{"chat_id",id},{"from_message_id",0},{"offset",0},{"limit",50},{"only_local",false}});
 }
 void MainWindow::submit() {
@@ -119,12 +135,18 @@ void MainWindow::applyBg(const QString& f) {
 void MainWindow::addMsg(const QJsonObject& m) {
   QJsonObject c = m["content"].toObject(); QString txt = c["@type"]=="messageText" ? c["text"].toObject()["text"].toString() : "[media]";
   bool out = m["is_outgoing"].toBool();
-  auto* it = new QListWidgetItem(txt); it->setData(Qt::UserRole, m["id"].toVariant().toLongLong());
+  auto* it = new QListWidgetItem(txt); it->setData(Qt::UserRole, m["id"].toVariant().toLongLong()); it->setData(Qt::UserRole+1, txt);
+  QJsonObject sd = m["sender_id"].toObject();
+  if (curGroup_ && !out && sd["@type"].toString() == "messageSenderUser") {
+    qint64 uid = sd["user_id"].toVariant().toLongLong();
+    if (userLabel_.contains(uid)) it->setText(userLabel_[uid] + "\n" + txt);
+    else { it->setText("...\n" + txt); bool first = !pending_.contains(uid); pending_[uid].append(it); if (first) td_->send({{"@type","getUser"},{"user_id",(double)uid}}); }
+  }
   it->setBackground(QColor(out ? "#2b2b2b" : "#262626")); it->setForeground(QColor("#fff"));
   it->setTextAlignment(out ? Qt::AlignRight : Qt::AlignLeft); msgs_->addItem(it); msgs_->scrollToBottom();
 }
 void MainWindow::setReply(QListWidgetItem* it, bool pin) {
-  replyId_ = it->data(Qt::UserRole).toLongLong(); pinned_ = pin; replyPreview_ = it->text().left(60);
+  replyId_ = it->data(Qt::UserRole).toLongLong(); pinned_ = pin; replyPreview_ = it->data(Qt::UserRole+1).toString().left(60);
   replyBar_->setText((pin ? "Pinned reply: " : "Replying to: ") + replyPreview_); replyW_->show(); input_->setFocus();
 }
 void MainWindow::clearReply() { replyId_ = 0; pinned_ = false; if (replyW_) replyW_->hide(); }
