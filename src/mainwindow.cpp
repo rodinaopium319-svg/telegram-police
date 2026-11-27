@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+#include "qrcodegen.hpp"
+#include <QPainter>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QPainter>
@@ -65,9 +67,12 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   QString saved = QSettings().value("bg").toString(); if (!saved.isEmpty()) applyBg(saved);
   resendBtn_ = new QPushButton("Resend code (SMS)"); resendBtn_->setStyleSheet("background:#8b1a1a;color:#fff;border:0;padding:12px;font-weight:bold"); resendBtn_->hide();
   connect(resendBtn_, &QPushButton::clicked, this, [this]{ title_->setText("Asking for a new code..."); td_->send({{"@type","resendAuthenticationCode"}}); });
-  auto* bar = new QHBoxLayout; bar->setSpacing(0); bar->addWidget(title_, 1); bar->addWidget(resendBtn_); bar->addWidget(bgBtn);
+  qrBtn_ = new QPushButton("Login with QR"); qrBtn_->setStyleSheet("background:#1f6f3a;color:#fff;border:0;padding:12px;font-weight:bold"); qrBtn_->hide();
+  connect(qrBtn_, &QPushButton::clicked, this, [this]{ title_->setText("Preparing QR code..."); td_->send({{"@type","requestQrCodeAuthentication"},{"other_user_ids",QJsonArray()}}); });
+  qrLabel_ = new QLabel; qrLabel_->setAlignment(Qt::AlignCenter); qrLabel_->hide();
+  auto* bar = new QHBoxLayout; bar->setSpacing(0); bar->addWidget(title_, 1); bar->addWidget(qrBtn_); bar->addWidget(resendBtn_); bar->addWidget(bgBtn);
   auto* right = new QVBoxLayout; right->setSpacing(0); right->setContentsMargins(0,0,0,0);
-  right->addLayout(bar); right->addWidget(msgs_); right->addWidget(replyW_); right->addWidget(input_);
+  right->addLayout(bar); right->addWidget(qrLabel_, 1); right->addWidget(msgs_); right->addWidget(replyW_); right->addWidget(input_);
   auto* h = new QHBoxLayout(this); h->setSpacing(0); h->setContentsMargins(0,0,0,0);
   h->addWidget(leftW); h->addLayout(right, 1);
   connect(td_, &TdClient::update, this, &MainWindow::onUpdate, Qt::QueuedConnection);
@@ -90,14 +95,24 @@ void MainWindow::onUpdate(QJsonObject o) {
   QString t = o["@type"].toString();
   if (t == "updateAuthorizationState") {
     QString s = o["authorization_state"].toObject()["@type"].toString();
-    if (s == "authorizationStateWaitPhoneNumber") { { QSettings q; title_->setText(QString("Log in: type your phone with country code (+20...) and press Enter.  [API ID %1, hash %2 chars - hash must be 32]").arg(q.value("api_id").toInt()).arg(q.value("api_hash").toString().size())); } input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
+    if (s != "authorizationStateWaitOtherDeviceConfirmation") qrLabel_->hide();
+    if (s == "authorizationStateWaitOtherDeviceConfirmation") {
+      QString link = o["authorization_state"].toObject()["link"].toString();
+      auto qr = qrcodegen::QrCode::encodeText(link.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+      int n = qr.getSize(), sc = 8, b = 3; QImage img((n+2*b)*sc, (n+2*b)*sc, QImage::Format_RGB32); img.fill(Qt::white);
+      QPainter pt(&img); pt.setPen(Qt::NoPen); pt.setBrush(Qt::black);
+      for (int y=0;y<n;y++) for (int x=0;x<n;x++) if (qr.getModule(x,y)) pt.drawRect((x+b)*sc,(y+b)*sc,sc,sc);
+      pt.end(); qrLabel_->setPixmap(QPixmap::fromImage(img)); qrLabel_->show(); qrBtn_->show();
+      title_->setText("Scan with your phone: Telegram > Settings > Devices > Link Desktop Device. The code refreshes by itself.");
+    }
+    else if (s == "authorizationStateWaitPhoneNumber") { qrBtn_->show(); { QSettings q; title_->setText(QString("Log in: type your phone with country code (+20...) and press Enter.  [API ID %1, hash %2 chars - hash must be 32]").arg(q.value("api_id").toInt()).arg(q.value("api_hash").toString().size())); } input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
     else if (s == "authorizationStateWaitCode") { QString ty = o["authorization_state"].toObject()["code_info"].toObject()["type"].toObject()["@type"].toString();
       QString where = ty=="authenticationCodeTypeTelegramMessage" ? "in your Telegram app (chat named Telegram) on another device" : ty=="authenticationCodeTypeSms" || ty=="authenticationCodeTypeSmsWord" || ty=="authenticationCodeTypeSmsPhrase" ? "by SMS" : ty=="authenticationCodeTypeCall" || ty=="authenticationCodeTypeFlashCall" || ty=="authenticationCodeTypeMissedCall" ? "by phone call" : "(" + ty + ")";
       auto ci = o["authorization_state"].toObject()["code_info"].toObject(); QString nt = ci["next_type"].toObject()["@type"].toString().replace("authenticationCodeType","");
       title_->setText("Code sent " + where + " to " + ci["phone_number"].toString() + ". Type it and press Enter. If nothing arrives after " + QString::number(ci["timeout"].toInt()) + "s, type resend (next: " + (nt.isEmpty() ? "none" : nt) + ")."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); resendBtn_->show(); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Type your 2-step verification password and press Enter"); input_->setPlaceholderText("2-step password"); input_->setProperty("m","pass"); input_->setEchoMode(QLineEdit::Password); }
     else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
-    else if (s == "authorizationStateReady") { resendBtn_->hide(); input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
+    else if (s == "authorizationStateReady") { resendBtn_->hide(); qrBtn_->hide(); qrLabel_->hide(); input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
       td_->send({{"@type","getMe"},{"@extra","me"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
   } else if (t == "user" && o["@extra"].toString() != "me") {
     qint64 uid = o["id"].toVariant().toLongLong();

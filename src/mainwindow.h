@@ -20,6 +20,6 @@ private slots:
   void onUpdate(QJsonObject o);
 private:
   TdClient* td_; QListWidget* list_; QListWidget* msgs_; QLabel* replyBar_; QWidget* replyW_ = nullptr; QPushButton* replyX_; qint64 replyId_ = 0; bool pinned_ = false; QString replyPreview_; QPoint pressPos_; QListWidgetItem* pressItem_ = nullptr; QTimer* hold_; QLineEdit* input_; QLabel* title_; QPushButton* profile_ = nullptr; QString meText_; QLineEdit* login_;
-  QMap<qint64,QString> names_; QMap<qint64,bool> isGroup_; bool curGroup_ = false; QMap<qint64,QString> userLabel_; QMap<qint64,QList<QListWidgetItem*>> pending_; QPushButton* logoutBtn_ = nullptr; QPushButton* resendBtn_ = nullptr; qint64 cur_ = 0; QPixmap bg_;
+  QMap<qint64,QString> names_; QMap<qint64,bool> isGroup_; bool curGroup_ = false; QMap<qint64,QString> userLabel_; QMap<qint64,QList<QListWidgetItem*>> pending_; QPushButton* logoutBtn_ = nullptr; QPushButton* resendBtn_ = nullptr; QPushButton* qrBtn_ = nullptr; QLabel* qrLabel_ = nullptr; qint64 cur_ = 0; QPixmap bg_;
   void setReply(QListWidgetItem*, bool pin); void clearReply(); void addMsg(const QJsonObject&); void applyBg(const QString&); void openChat(qint64 id); void submit();
 };
