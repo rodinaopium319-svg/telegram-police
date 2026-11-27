@@ -37,7 +37,7 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   auto* topRow = new QHBoxLayout; topRow->setSpacing(0); topRow->addWidget(profile_, 1); topRow->addWidget(logoutBtn_);
   left->addLayout(topRow); left->addWidget(list_);
   auto* leftW = new QWidget; leftW->setLayout(left); leftW->setFixedWidth(300);
-  title_ = new QLabel("Telegram Police"); title_->setObjectName("t");
+  title_ = new QLabel("Telegram Police"); title_->setObjectName("t"); title_->setWordWrap(true);
   msgs_ = new QListWidget; msgs_->setObjectName("m"); msgs_->setWordWrap(true); msgs_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   msgs_->viewport()->installEventFilter(this); msgs_->setContextMenuPolicy(Qt::NoContextMenu);
   hold_ = new QTimer(this); hold_->setSingleShot(true); hold_->setInterval(700);
@@ -77,11 +77,11 @@ void MainWindow::onUpdate(QJsonObject o) {
   QString t = o["@type"].toString();
   if (t == "updateAuthorizationState") {
     QString s = o["authorization_state"].toObject()["@type"].toString();
-    if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Enter phone number (+20...) below"); login_ = input_; input_->setProperty("m","phone"); }
-    else if (s == "authorizationStateWaitCode") { title_->setText("Enter the code Telegram sent you"); input_->setProperty("m","code"); }
-    else if (s == "authorizationStateWaitPassword") { title_->setText("Enter your 2-step password"); input_->setProperty("m","pass"); }
+    if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Log in: type your phone number with country code (e.g. +20...) in the box below and press Enter"); input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
+    else if (s == "authorizationStateWaitCode") { title_->setText("Type the code Telegram sent you (in your Telegram app) and press Enter"); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
+    else if (s == "authorizationStateWaitPassword") { title_->setText("Type your 2-step verification password and press Enter"); input_->setPlaceholderText("2-step password"); input_->setProperty("m","pass"); input_->setEchoMode(QLineEdit::Password); }
     else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
-    else if (s == "authorizationStateReady") { input_->setProperty("m","chat"); title_->setText("Telegram Police");
+    else if (s == "authorizationStateReady") { input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
       td_->send({{"@type","getMe"},{"@extra","me"}}); td_->send({{"@type","loadChats"},{"limit",100}}); td_->send({{"@type","getChats"},{"limit",100}}); }
   } else if (t == "user" && o["@extra"].toString() != "me") {
     qint64 uid = o["id"].toVariant().toLongLong();
@@ -94,6 +94,8 @@ void MainWindow::onUpdate(QJsonObject o) {
     QString n = (o["first_name"].toString()+" "+o["last_name"].toString()).trimmed();
     QString un = o["usernames"].toObject()["active_usernames"].toArray().isEmpty() ? "" : "@"+o["usernames"].toObject()["active_usernames"].toArray()[0].toString();
     meText_ = n + "\n" + un + "\n+" + o["phone_number"].toString(); profile_->setText(n);
+  } else if (t == "error") {
+    title_->setText("Error: " + o["message"].toString().left(120));
   } else if (t == "chats") {
     for (auto v : o["chat_ids"].toArray()) td_->send({{"@type","getChat"},{"chat_id",v.toVariant().toLongLong()}});
   } else if (t == "chat") {

@@ -14,5 +14,5 @@ int main(int argc, char** argv) {
     s.setValue("api_hash", QInputDialog::getText(nullptr, "Telegram Police", "API hash:"));
   }
   TdClient c(s.value("api_id").toInt(), s.value("api_hash").toString());
-  MainWindow w(&c); w.show(); return a.exec();
+  MainWindow w(&c); w.show(); c.start(); return a.exec();
 }
