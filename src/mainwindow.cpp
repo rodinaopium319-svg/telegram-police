@@ -97,7 +97,7 @@ void MainWindow::onUpdate(QJsonObject o) {
     QString un = o["usernames"].toObject()["active_usernames"].toArray().isEmpty() ? "" : "@"+o["usernames"].toObject()["active_usernames"].toArray()[0].toString();
     meText_ = n + "\n" + un + "\n+" + o["phone_number"].toString(); profile_->setText(n);
   } else if (t == "error") {
-    title_->setText("Error: " + o["message"].toString().left(120));
+    title_->setText("Error: " + o["message"].toString()); title_->setToolTip(o["message"].toString());
   } else if (t == "chats") {
     for (auto v : o["chat_ids"].toArray()) td_->send({{"@type","getChat"},{"chat_id",v.toVariant().toLongLong()}});
   } else if (t == "chat") {
