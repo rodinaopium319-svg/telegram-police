@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QMessageBox>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QApplication>
 #ifdef _WIN32
 #include <windows.h>
@@ -80,7 +81,9 @@ void MainWindow::onUpdate(QJsonObject o) {
   if (t == "updateAuthorizationState") {
     QString s = o["authorization_state"].toObject()["@type"].toString();
     if (s == "authorizationStateWaitPhoneNumber") { title_->setText("Log in: type your phone number with country code (e.g. +20...) in the box below and press Enter"); input_->setPlaceholderText("Phone number, e.g. +201234567890"); input_->setProperty("m","phone"); }
-    else if (s == "authorizationStateWaitCode") { title_->setText("Type the code Telegram sent you (in your Telegram app) and press Enter"); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
+    else if (s == "authorizationStateWaitCode") { QString ty = o["authorization_state"].toObject()["code_info"].toObject()["type"].toObject()["@type"].toString();
+      QString where = ty=="authenticationCodeTypeTelegramMessage" ? "in your Telegram app (chat named Telegram) on another device" : ty=="authenticationCodeTypeSms" || ty=="authenticationCodeTypeSmsWord" || ty=="authenticationCodeTypeSmsPhrase" ? "by SMS" : ty=="authenticationCodeTypeCall" || ty=="authenticationCodeTypeFlashCall" || ty=="authenticationCodeTypeMissedCall" ? "by phone call" : "(" + ty + ")";
+      title_->setText("Code sent " + where + ". Type it and press Enter. Type resend for a new code."); input_->setPlaceholderText("Login code"); input_->setProperty("m","code"); }
     else if (s == "authorizationStateWaitPassword") { title_->setText("Type your 2-step verification password and press Enter"); input_->setPlaceholderText("2-step password"); input_->setProperty("m","pass"); input_->setEchoMode(QLineEdit::Password); }
     else if (s == "authorizationStateClosed") { QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); }
     else if (s == "authorizationStateReady") { input_->setEchoMode(QLineEdit::Normal); input_->setPlaceholderText("Write a message..."); input_->setProperty("m","chat"); title_->setText("Telegram Police");
@@ -121,7 +124,8 @@ void MainWindow::openChat(qint64 id) {
 }
 void MainWindow::submit() {
   QString m = input_->property("m").toString(), v = input_->text(); if (v.isEmpty()) return; input_->clear();
-  if (m=="phone") td_->send({{"@type","setAuthenticationPhoneNumber"},{"phone_number",v}});
+  if (m=="phone") { QString ph = v; ph.remove(QRegularExpression("[\\s\\-\\(\\)]")); if (!ph.startsWith("+")) ph = "+" + ph; title_->setText("Sending code request to " + ph + " ..."); td_->send({{"@type","setAuthenticationPhoneNumber"},{"phone_number",ph}}); }
+  else if (m=="code" && v.trimmed().toLower()=="resend") { title_->setText("Asking for a new code..."); td_->send({{"@type","resendAuthenticationCode"}}); }
   else if (m=="code") td_->send({{"@type","checkAuthenticationCode"},{"code",v}});
   else if (m=="pass") td_->send({{"@type","checkAuthenticationPassword"},{"password",v}});
   else if (cur_) {
