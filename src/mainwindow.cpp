@@ -28,7 +28,9 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   list_ = new QListWidget;
   profile_ = new QPushButton("Me"); profile_->setStyleSheet("background:rgba(0,0,0,220);color:#fff;border:0;padding:12px;text-align:left;font-weight:bold");
   connect(profile_, &QPushButton::clicked, this, [this]{
-    QMessageBox::information(this, "My profile", meText_.isEmpty() ? "Loading..." : meText_); });
+    if (input_->property("m").toString() != "chat") { QMessageBox::information(this, "My profile", "You are not logged in yet. Type your phone number in the box at the bottom first."); return; }
+    if (meText_.isEmpty()) { td_->send({{"@type","getMe"},{"@extra","me"}}); QMessageBox::information(this, "My profile", "Still loading your profile, try again in a few seconds."); return; }
+    QMessageBox::information(this, "My profile", meText_); });
   auto* left = new QVBoxLayout; left->setSpacing(0); left->setContentsMargins(0,0,0,0);
   logoutBtn_ = new QPushButton("Log out"); logoutBtn_->setStyleSheet("background:rgba(28,28,28,235);color:#fff;border:0;padding:12px");
   connect(logoutBtn_, &QPushButton::clicked, this, [this]{
