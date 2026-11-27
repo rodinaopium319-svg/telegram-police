@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QMessageBox>
 #include <QProcess>
+#include <QInputDialog>
 #include <QRegularExpression>
 #include <QApplication>
 #ifdef _WIN32
@@ -37,7 +38,14 @@ MainWindow::MainWindow(TdClient* c) : td_(c) {
   connect(logoutBtn_, &QPushButton::clicked, this, [this]{
     if (QMessageBox::question(this, "Log out", "Log out of this account? You can log in with another number.") == QMessageBox::Yes)
       td_->send({{"@type","logOut"}}); });
-  auto* topRow = new QHBoxLayout; topRow->setSpacing(0); topRow->addWidget(profile_, 1); topRow->addWidget(logoutBtn_);
+  auto* keyBtn = new QPushButton("API key"); keyBtn->setStyleSheet("background:rgba(28,28,28,235);color:#fff;border:0;padding:12px");
+  connect(keyBtn, &QPushButton::clicked, this, [this]{
+    QSettings q; bool ok = false;
+    int id = QInputDialog::getInt(this, "API key", QString("API ID (current: %1):").arg(q.value("api_id").toInt()), q.value("api_id").toInt(), 0, 2147483647, 1, &ok); if (!ok) return;
+    QString h = QInputDialog::getText(this, "API key", QString("API hash, 32 characters (current length: %1):").arg(q.value("api_hash").toString().size()), QLineEdit::Normal, "", &ok).trimmed(); if (!ok) return;
+    if (id <= 0 || !QRegularExpression("^[0-9a-fA-F]{32}$").match(h).hasMatch()) { QMessageBox::warning(this, "API key", "API ID must be a number and the hash must be exactly 32 letters/digits (0-9, a-f). Nothing saved."); return; }
+    q.setValue("api_id", id); q.setValue("api_hash", h); QProcess::startDetached(QApplication::applicationFilePath(), {}); QApplication::quit(); });
+  auto* topRow = new QHBoxLayout; topRow->setSpacing(0); topRow->addWidget(profile_, 1); topRow->addWidget(keyBtn); topRow->addWidget(logoutBtn_);
   left->addLayout(topRow); left->addWidget(list_);
   auto* leftW = new QWidget; leftW->setLayout(left); leftW->setFixedWidth(300);
   title_ = new QLabel("Telegram Police"); title_->setObjectName("t"); title_->setWordWrap(true);
