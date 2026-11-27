@@ -139,6 +139,11 @@ void MainWindow::onUpdate(QJsonObject o) {
   } else if (t == "updateNewMessage" || t == "message") {
     QJsonObject m = t=="message" ? o : o["message"].toObject();
     if (m["chat_id"].toVariant().toLongLong() == cur_) addMsg(m);
+  } else if (t == "updateMessageSendSucceeded") {
+    qint64 oldId = o["old_message_id"].toVariant().toLongLong(); QJsonObject m = o["message"].toObject();
+    qint64 newId = m["id"].toVariant().toLongLong(); bool found = false;
+    for (int i = 0; i < msgs_->count(); ++i) { auto* it = msgs_->item(i); qint64 id = it->data(Qt::UserRole).toLongLong(); if (id == newId) { if (found) { delete msgs_->takeItem(i); --i; } found = true; } else if (id == oldId) { if (found) { delete msgs_->takeItem(i); --i; } else { it->setData(Qt::UserRole, newId); found = true; } } }
+    if (!found && m["chat_id"].toVariant().toLongLong() == cur_) addMsg(m);
   } else if (t == "messages") {
     QJsonArray a = o["messages"].toArray();
     for (int i = a.size()-1; i >= 0; --i) onUpdate(a[i].toObject().isEmpty()? QJsonObject{} : [&]{ auto m = a[i].toObject(); m["@type"]="message"; return m; }());
@@ -167,6 +172,7 @@ void MainWindow::applyBg(const QString& f) {
 }
 
 void MainWindow::addMsg(const QJsonObject& m) {
+  { qint64 mid = m["id"].toVariant().toLongLong(); for (int i = msgs_->count()-1; i >= 0 && i >= msgs_->count()-200; --i) if (msgs_->item(i)->data(Qt::UserRole).toLongLong() == mid) return; }
   QJsonObject c = m["content"].toObject(); QString txt = c["@type"]=="messageText" ? c["text"].toObject()["text"].toString() : "[media]";
   bool out = m["is_outgoing"].toBool();
   auto* it = new QListWidgetItem(txt); it->setData(Qt::UserRole, m["id"].toVariant().toLongLong()); it->setData(Qt::UserRole+1, txt);
